@@ -1,15 +1,25 @@
 function parseQuery(query) {
   query = query.trim();
-  const groupBySplit = query.split(/\sGROUP BY\s/i);
-  const queryWithoutGroupBy = groupBySplit[0]; // Everything before GROUP BY clause
-  let groupByFields =
-    groupBySplit.length > 1
-      ? groupBySplit[1]
-          .trim()
-          .split(",")
-          .map((field) => field.trim())
-      : null;
-  const whereSplit = queryWithoutGroupBy.split(/\sWHERE\s/i);
+  const orderByRegex = /\sORDER BY\s(.+)/i;
+  const orderByMatch = query.match(orderByRegex);
+
+  let orderByFields = null;
+  if (orderByMatch) {
+    orderByFields = orderByMatch[1].split(",").map((field) => {
+      const [fieldName, order] = field.trim().split(/\s+/);
+      return { fieldName, order: order ? order.toUpperCase() : "ASC" };
+    });
+  }
+  query = query.replace(orderByRegex, "");
+  const groupByRegex = /\sGROUP BY\s(.+)/i;
+  const groupByMatch = query.match(groupByRegex);
+
+  let groupByFields = null;
+  if (groupByMatch) {
+    groupByFields = groupByMatch[1].split(",").map((field) => field.trim());
+  }
+  query = query.replace(groupByRegex, "");
+  const whereSplit = query.split(/\sWHERE\s/i);
   const queryWithoutWhere = whereSplit[0]; // Everything before WHERE clause
   const whereClause = whereSplit.length > 1 ? whereSplit[1].trim() : null;
   const joinSplit = queryWithoutWhere.split(/\s(INNER|LEFT|RIGHT) JOIN\s/i);
@@ -23,10 +33,14 @@ function parseQuery(query) {
   const [, fields, table] = selectMatch;
   const { joinType, joinTable, joinCondition } =
     parseJoinClause(queryWithoutWhere);
+
+  // Parse the WHERE part if it exists
   let whereClauses = [];
   if (whereClause) {
     whereClauses = parseWhereClause(whereClause);
   }
+
+  // Check for the presence of aggregate functions without GROUP BY
   const aggregateFunctionRegex =
     /(\bCOUNT\b|\bAVG\b|\bSUM\b|\bMIN\b|\bMAX\b)\s*\(\s*(\*|\w+)\s*\)/i;
   const hasAggregateWithoutGroupBy =
@@ -40,6 +54,7 @@ function parseQuery(query) {
     joinTable,
     joinCondition,
     groupByFields,
+    orderByFields,
     hasAggregateWithoutGroupBy,
   };
 }

@@ -96,100 +96,6 @@ function createResultRow(
   return resultRow;
 }
 
-async function executeSELECTQuery(query) {
-  const {
-    fields,
-    table,
-    whereClauses,
-    joinType,
-    joinTable,
-    joinCondition,
-    groupByFields,
-    hasAggregateWithoutGroupBy,
-  } = parseQuery(query);
-  let data = await readCSV(`${table}.csv`);
-
-  // Perform INNER JOIN if specified
-  if (joinTable && joinCondition) {
-    const joinData = await readCSV(`${joinTable}.csv`);
-    switch (joinType.toUpperCase()) {
-      case "INNER":
-        data = performInnerJoin(data, joinData, joinCondition, fields, table);
-        break;
-      case "LEFT":
-        data = performLeftJoin(data, joinData, joinCondition, fields, table);
-        break;
-      case "RIGHT":
-        data = performRightJoin(data, joinData, joinCondition, fields, table);
-        break;
-      default:
-        throw new Error(`Unsupported JOIN type: ${joinType}`);
-    }
-  }
-  let filteredData =
-    whereClauses.length > 0
-      ? data.filter((row) =>
-          whereClauses.every((clause) => evaluateCondition(row, clause))
-        )
-      : data;
-
-  let groupResults = filteredData;
-  console.log({ hasAggregateWithoutGroupBy });
-  if (hasAggregateWithoutGroupBy) {
-    const result = {};
-
-    console.log({ filteredData });
-
-    fields.forEach((field) => {
-      const match = /(\w+)\((\*|\w+)\)/.exec(field);
-      if (match) {
-        const [, aggFunc, aggField] = match;
-        switch (aggFunc.toUpperCase()) {
-          case "COUNT":
-            result[field] = filteredData.length;
-            break;
-          case "SUM":
-            result[field] = filteredData.reduce(
-              (acc, row) => acc + parseFloat(row[aggField]),
-              0
-            );
-            break;
-          case "AVG":
-            result[field] =
-              filteredData.reduce(
-                (acc, row) => acc + parseFloat(row[aggField]),
-                0
-              ) / filteredData.length;
-            break;
-          case "MIN":
-            result[field] = Math.min(
-              ...filteredData.map((row) => parseFloat(row[aggField]))
-            );
-            break;
-          case "MAX":
-            result[field] = Math.max(
-              ...filteredData.map((row) => parseFloat(row[aggField]))
-            );
-            break;
-        }
-      }
-    });
-
-    return [result];
-  } else if (groupByFields) {
-    groupResults = applyGroupBy(filteredData, groupByFields, fields);
-    return groupResults;
-  } else {
-    return groupResults.map((row) => {
-      const selectedRow = {};
-      fields.forEach((field) => {
-        selectedRow[field] = row[field];
-      });
-      return selectedRow;
-    });
-  }
-}
-
 function evaluateCondition(row, clause) {
   let { field, operator, value } = clause;
 
@@ -305,6 +211,117 @@ function applyGroupBy(data, groupByFields, aggregateFunctions) {
 
     return finalGroup;
   });
+}
+
+async function executeSELECTQuery(query) {
+  const {
+    fields,
+    table,
+    whereClauses,
+    joinType,
+    joinTable,
+    joinCondition,
+    groupByFields,
+    hasAggregateWithoutGroupBy,
+    orderByFields,
+  } = parseQuery(query);
+  let data = await readCSV(`${table}.csv`);
+
+  if (joinTable && joinCondition) {
+    const joinData = await readCSV(`${joinTable}.csv`);
+    switch (joinType.toUpperCase()) {
+      case "INNER":
+        data = performInnerJoin(data, joinData, joinCondition, fields, table);
+        break;
+      case "LEFT":
+        data = performLeftJoin(data, joinData, joinCondition, fields, table);
+        break;
+      case "RIGHT":
+        data = performRightJoin(data, joinData, joinCondition, fields, table);
+        break;
+      default:
+        throw new Error(`Unsupported JOIN type: ${joinType}`);
+    }
+  }
+  let filteredData =
+    whereClauses.length > 0
+      ? data.filter((row) =>
+          whereClauses.every((clause) => evaluateCondition(row, clause))
+        )
+      : data;
+
+  let groupResults = filteredData;
+  if (hasAggregateWithoutGroupBy) {
+    const result = {};
+    fields.forEach((field) => {
+      const match = /(\w+)\((\*|\w+)\)/.exec(field);
+      if (match) {
+        const [, aggFunc, aggField] = match;
+        switch (aggFunc.toUpperCase()) {
+          case "COUNT":
+            result[field] = filteredData.length;
+            break;
+          case "SUM":
+            result[field] = filteredData.reduce(
+              (acc, row) => acc + parseFloat(row[aggField]),
+              0
+            );
+            break;
+          case "AVG":
+            result[field] =
+              filteredData.reduce(
+                (acc, row) => acc + parseFloat(row[aggField]),
+                0
+              ) / filteredData.length;
+            break;
+          case "MIN":
+            result[field] = Math.min(
+              ...filteredData.map((row) => parseFloat(row[aggField]))
+            );
+            break;
+          case "MAX":
+            result[field] = Math.max(
+              ...filteredData.map((row) => parseFloat(row[aggField]))
+            );
+            break;
+        }
+      }
+    });
+
+    return [result];
+  } else if (groupByFields) {
+    groupResults = applyGroupBy(filteredData, groupByFields, fields);
+    let orderedResults = groupResults;
+    if (orderByFields) {
+      orderedResults = groupResults.sort((a, b) => {
+        for (let { fieldName, order } of orderByFields) {
+          if (a[fieldName] < b[fieldName]) return order === "ASC" ? -1 : 1;
+          if (a[fieldName] > b[fieldName]) return order === "ASC" ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+    return groupResults;
+  } else {
+    let orderedResults = groupResults;
+    if (orderByFields) {
+      orderedResults = groupResults.sort((a, b) => {
+        for (let { fieldName, order } of orderByFields) {
+          if (a[fieldName] < b[fieldName]) return order === "ASC" ? -1 : 1;
+          if (a[fieldName] > b[fieldName]) return order === "ASC" ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+
+    return orderedResults.map((row) => {
+      const selectedRow = {};
+      fields.forEach((field) => {
+        selectedRow[field] = row[field];
+      });
+      return selectedRow;
+    });
+  }
 }
 
 module.exports = executeSELECTQuery;
