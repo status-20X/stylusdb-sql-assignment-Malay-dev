@@ -5,7 +5,7 @@ const {
   executeSELECTQuery,
   executeINSERTQuery,
   executeDELETEQuery,
-} = require("./index");
+} = require("./queryExecutor.js");
 
 const rl = readline.createInterface({
   input: process.stdin,
