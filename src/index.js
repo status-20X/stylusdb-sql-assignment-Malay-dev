@@ -1,4 +1,4 @@
-const { readCSV, writeCSV } = require("./readCSV.js");
+const { readCSV, writeCSV } = require("./csvReader");
 const {
   parseSelectQuery,
   parseInsertQuery,
@@ -8,7 +8,7 @@ const {
   executeSELECTQuery,
   executeINSERTQuery,
   executeDELETEQuery,
-} = require("./executeSELECTQuery");
+} = require("./queryExecutor");
 
 module.exports = {
   readCSV,
